@@ -1,0 +1,27 @@
+WITH t1 AS
+(
+	SELECT year, SUM(forest_area_sqkm) AS tot_area
+	FROM forest_area
+	GROUP BY 1
+	HAVING year IN (1990, 2016)
+	LIMIT 100
+)
+SELECT *, ROUND(difference/tot_area*100000)/1000 AS diff_ratio
+FROM
+(
+	SELECT year, tot_area, tot_area - LEAD(tot_area)   OVER (ORDER BY year) AS difference
+	FROM t1
+)
+WHERE year IN (1990);
+
+
+
+SELECT * 
+FROM
+(
+	SELECT *, total_area_sq_mi * 2.58998917 AS tot_area_sqkm
+	FROM land_area
+)
+WHERE (tot_area_sqkm <= 2191038.) AND (year = 2016)
+ORDER BY 5 DESC
+LIMIT 10;

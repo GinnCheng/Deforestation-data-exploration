@@ -1,0 +1,108 @@
+
+WITH t2 AS
+(
+	SELECT f.year, f.forest_area_sqkm AS fa, l.total_area_sq_mi * POWER(1.609,2) AS la
+	FROM land_area AS l
+	JOIN forest_area AS f ON l.country_code = f.country_code
+	AND l.country_name = f.country_name
+	AND l.year = f. year
+)
+SELECT year, ROUND(SUM(fa)/SUM(la)*100000)/1000 AS percent_of_forestration
+FROM t2
+GROUP BY 1
+ORDER BY year DESC;
+
+
+
+WITH t2 AS
+(
+	SELECT f.year, f.country_code, f.country_name, f.forest_area_sqkm AS forest_area, l.total_area_sq_mi * POWER(1.609,2) AS land_area
+	FROM land_area AS l
+	JOIN forest_area AS f ON l.country_code = f.country_code
+	AND l.country_name = f.country_name
+	AND l.year = f. year
+)
+SELECT *
+FROM
+(
+	SELECT t2.year, re.region, 
+	ROUND(SUM(t2.forest_area)/SUM(t2.land_area)*10000)/100 AS forest_percent
+	FROM t2
+	JOIN regions re ON t2.country_code = re.country_code
+	AND t2.country_name = re.country_name
+	GROUP BY 1,2
+	HAVING year IN (1990, 2016)
+)
+WHERE forest_percent IS NOT NULL AND year = 1990
+ORDER BY forest_percent;
+
+
+
+
+
+CREATE TABLE forest_percent_1990 AS
+(
+	WITH t2 AS
+	(
+		 SELECT f.year, f.country_code, f.country_name, f.forest_area_sqkm AS forest_area, l.total_area_sq_mi * POWER(1.609,2) AS land_area
+		 FROM land_area AS l
+		 JOIN forest_area AS f ON l.country_code = f.country_code
+		 AND l.country_name = f.country_name
+		 AND l.year = f.year
+	),
+	t3 AS
+	(
+		 SELECT t2.year, re.region, 
+		 ROUND(SUM(t2.forest_area)/SUM(t2.land_area)*10000)/100 AS forest_percent
+		 FROM t2
+		 JOIN regions re ON t2.country_code = re.country_code
+		 AND t2.country_name = re.country_name
+		 GROUP BY 1,2
+		 HAVING year IN (1990, 2016)
+	)
+	SELECT *
+	FROM t3
+	/*PIVOT (forest_percent FOR year) AS P*/
+	WHERE forest_percent IS NOT NULL AND year = 1990
+	ORDER BY forest_percent
+);
+
+
+
+CREATE TABLE forest_percent_2016 AS
+(
+	WITH t2 AS
+	(
+		 SELECT f.year, f.country_code, f.country_name, f.forest_area_sqkm AS forest_area, l.total_area_sq_mi * POWER(1.609,2) AS land_area
+		 FROM land_area AS l
+		 JOIN forest_area AS f ON l.country_code = f.country_code
+		 AND l.country_name = f.country_name
+		 AND l.year = f.year
+	),
+	t3 AS
+	(
+		 SELECT t2.year, re.region, 
+		 ROUND(SUM(t2.forest_area)/SUM(t2.land_area)*10000)/100 AS forest_percent
+		 FROM t2
+		 JOIN regions re ON t2.country_code = re.country_code
+		 AND t2.country_name = re.country_name
+		 GROUP BY 1,2
+		 HAVING year IN (1990, 2016)
+	)
+	SELECT *
+	FROM t3
+	/*PIVOT (forest_percent FOR year) AS P*/
+	WHERE forest_percent IS NOT NULL AND year = 2016
+	ORDER BY forest_percent
+);
+
+
+SELECT f1.region, f1.forest_percent AS forest_percentage_1990, f2.forest_percent AS forest_percentage_2016, f2.forest_percent - f1.forest_percent AS forest_change
+FROM forest_percent_1990 f1
+JOIN forest_percent_2016 f2
+ON f1.region = f2.region
+ORDER BY forest_change
+
+
+
+
