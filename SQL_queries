@@ -1,21 +1,38 @@
 /*APPENDIX: SQL Queries Used*/
+/*View of the entire DB*/
+CREATE VIEW forestation AS
+(
+  SELECT fa.*, la.total_area_sq_mi, re.region, re.income_group
+  FROM forest_area fa
+  JOIN land_area la 
+  ON fa.country_code = la.country_code
+  AND fa.year = la.year
+  JOIN regions re
+  ON re.country_code = fa.country_code
+);
+SELECT * 
+FROM forestation;
+
+
 /*Q1.*/
 /*Paragraph 1*/
-WITH t1 AS
-(
-    SELECT year, SUM(forest_area_sqkm) AS tot_area
-    FROM forest_area
-    GROUP BY 1
-    HAVING year IN (1990, 2016)
-    LIMIT 100
-)
-SELECT *, ROUND(difference/tot_area*100000)/1000 AS diff_ratio
+SELECT year, forest_area_sqkm
+FROM forest_area
+WHERE country_name = 'World' AND year in (1990, 2016)
+ORDER BY year;
+
+SELECT 
+  year, 
+  forest_area_sqkm as in_1990, 
+  (forest_area_sqkm - LEAD(forest_area_sqkm) OVER (ORDER BY year)) AS difference,
+  (forest_area_sqkm - LEAD(forest_area_sqkm) OVER (ORDER BY year))/forest_area_sqkm*100 AS difference_ratio
 FROM
 (
- SELECT year, tot_area, tot_area - LEAD(tot_area)   OVER (ORDER BY year) AS difference
- FROM t1
-)
-WHERE year IN (1990);
+  SELECT year, forest_area_sqkm
+  FROM forest_area
+  WHERE country_name = 'World' AND year in (1990, 2016)
+  ORDER BY year
+);
 
 /*-----------------------------------------------------------------------------------------------------------------------*/
 
@@ -26,7 +43,7 @@ FROM
  SELECT *, total_area_sq_mi * 2.58998917 AS tot_area_sqkm
  FROM land_area
 )
-WHERE (tot_area_sqkm <= 2191038.) AND (year = 2016)
+WHERE (tot_area_sqkm <= 1324449.) AND (year = 2016)
 ORDER BY 5 DESC
 LIMIT 10;
 
@@ -155,7 +172,7 @@ CREATE TABLE land_area_sqkm AS
 (
     SELECT *, total_area_sq_mi*POWER(1.609,2) AS total_area_sqkm
     FROM land_area
-)
+);
 
 
 
@@ -183,40 +200,23 @@ ORDER BY forest_area_change DESC;
 WITH 
 t1 AS
 (
-  SELECT country_name, year, forest_area_sqkm AS forest_area_1990
+  SELECT country_code, country_name, year, forest_area_sqkm AS forest_area_1990
   FROM forest_area
   WHERE (year = 1990 AND forest_area_sqkm IS NOT NULL)
 ),
 t2 AS
 (
-  SELECT country_name, year, forest_area_sqkm AS forest_area_2016
+  SELECT country_code, year, forest_area_sqkm AS forest_area_2016
   FROM forest_area
   WHERE (year = 2016 AND forest_area_sqkm IS NOT NULL)
-),
-land_1990 AS
-(
-  SELECT country_name, total_area_sqkm AS total_area_sqkm_1990
-  FROM land_area_sqkm
-  WHERE (year = 1990 AND total_area_sqkm IS NOT NULL)
-),
-land_2016 AS
-(
-  SELECT country_name, total_area_sqkm AS total_area_sqkm_2016
-  FROM land_area_sqkm
-  WHERE (year = 2016 AND total_area_sqkm IS NOT NULL)
-),
-t3 AS
-(
-  SELECT t1.country_name, 
-  ROUND(t1.forest_area_1990/l1.total_area_sqkm_1990*10000)/100 AS forest_percent_1990, 
-  ROUND(t2.forest_area_2016/l2.total_area_sqkm_2016*10000)/100 AS forest_percent_2016
-  FROM t1
-  JOIN t2 ON t1.country_name = t2.country_name
-  JOIN land_1990 l1 ON l1.country_name = t1.country_name
-  JOIN land_2016 l2 ON l2.country_name = t1.country_name
 )
-SELECT *, forest_percent_2016-forest_percent_1990 AS forest_percent_change
-FROM t3
+SELECT  
+  t1.country_name, 
+  t1.forest_area_1990 AS forest_1990, 
+  t2.forest_area_2016 AS forest_2016,
+  (t2.forest_area_2016 - t1.forest_area_1990)/t1.forest_area_1990*100 AS change_ratio
+FROM t1
+JOIN t2 ON t1.country_code = t2.country_code
 ORDER BY 4 DESC;
 
 /*-----------------------------------------------------------------------------------------------------------------------*/
@@ -274,62 +274,81 @@ ORDER BY 3;
 /*Table 3.3*/
 WITH t4 AS
 (
-  SELECT fa.year, fa.country_name, 
-  ROUND(fa.forest_area_sqkm/la.total_area_sqkm*10000)/100 AS forest_percentile,
-  NTILE(4) OVER (ORDER BY fa.forest_area_sqkm/la.total_area_sqkm DESC)
-  FROM 
-    (
-      SELECT * 
-      FROM forest_area 
-      WHERE forest_area_sqkm IS NOT NULL AND year = 2016
-    ) AS fa
-  JOIN 
-    (
-      SELECT *
-      FROM land_area_sqkm
-      WHERE total_area_sqkm IS NOT NULL and year = 2016
-    ) AS la
-  ON fa.country_name = la.country_name
-  AND fa.year = la.year
+  SELECT *, 
+  CASE  
+    WHEN forest_percentile > 75 THEN '1st quartile'
+    WHEN forest_percentile > 50 AND forest_percentile <= 75 THEN '2nd quartile'
+    WHEN forest_percentile > 25 AND forest_percentile <= 50 THEN '3rd quartile'
+    ELSE '4th quartile' END AS quartile
+  FROM
+  (
+    SELECT 
+      fa.year, 
+      fa.country_name, 
+      ROUND(fa.forest_area_sqkm/la.total_area_sqkm*10000)/100 AS forest_percentile
+    FROM 
+      (
+        SELECT * 
+        FROM forest_area 
+        WHERE forest_area_sqkm IS NOT NULL AND year = 2016
+      ) AS fa
+    JOIN 
+      (
+        SELECT *
+        FROM land_area_sqkm
+        WHERE total_area_sqkm IS NOT NULL and year = 2016
+      ) AS la
+    ON fa.country_code = la.country_code
+    AND fa.year = la.year
+  )
 )
 SELECT 
-  CASE  
-    WHEN ntile = 1 THEN '1st quartile'
-    WHEN ntile = 2 THEN '2nd quartile'
-    WHEN ntile = 3 THEN '3rd quartile'
-    ELSE '4th quartile' END,
-  COUNT(ntile) AS number_of_countries
+  quartile,
+  COUNT(quartile) AS number_of_countries
 FROM t4
 GROUP BY 1
 ORDER BY 1;
+
+
 
 /*-----------------------------------------------------------------------------------------------------------------------*/
 
 /*Table 3.4*/
 WITH t4 AS
 (
-  SELECT fa.year, fa.country_name, 
-  ROUND(fa.forest_area_sqkm/la.total_area_sqkm*10000)/100 AS forest_percentile,
-  NTILE(4) OVER (ORDER BY fa.forest_area_sqkm/la.total_area_sqkm DESC)
-  FROM 
-    (
-      SELECT * 
-      FROM forest_area 
-      WHERE forest_area_sqkm IS NOT NULL AND year = 2016
-    ) AS fa
-  JOIN 
-    (
-      SELECT *
-      FROM land_area_sqkm
-      WHERE total_area_sqkm IS NOT NULL and year = 2016
-    ) AS la
-  ON fa.country_name = la.country_name
-  AND fa.year = la.year
+  SELECT *, 
+  CASE  
+    WHEN forest_percentile > 75 THEN '1st quartile'
+    WHEN forest_percentile > 50 AND forest_percentile <= 75 THEN '2nd quartile'
+    WHEN forest_percentile > 25 AND forest_percentile <= 50 THEN '3rd quartile'
+    ELSE '4th quartile' END AS quartile
+  FROM
+  (
+    SELECT 
+      fa.year,
+      fa.country_code, 
+      fa.country_name, 
+      ROUND(fa.forest_area_sqkm/la.total_area_sqkm*10000)/100 AS forest_percentile
+    FROM 
+      (
+        SELECT * 
+        FROM forest_area 
+        WHERE forest_area_sqkm IS NOT NULL AND year = 2016
+      ) AS fa
+    JOIN 
+      (
+        SELECT *
+        FROM land_area_sqkm
+        WHERE total_area_sqkm IS NOT NULL and year = 2016
+      ) AS la
+    ON fa.country_code = la.country_code
+    AND fa.year = la.year
+  )
 )
 SELECT t4.country_name, re.region, forest_percentile
 FROM t4
-JOIN regions re ON t4.country_name = re.country_name
-WHERE ntile = 1
+JOIN regions re ON t4.country_code = re.country_code
+WHERE quartile = '1st quartile'
 ORDER BY 3 DESC;
 
 /*-----------------------------------------------------------------------------------------------------------------------*/
